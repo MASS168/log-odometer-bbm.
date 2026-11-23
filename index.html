@@ -1,0 +1,1975 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log Odometer & Pengisian BBM Online (Multi-Kegiatan)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #f1f5f9;
+      color: #0f172a;
+    }
+    .tab-active {
+      background-color: #1b4332;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(27, 67, 50, 0.25);
+    }
+    .tab-inactive {
+      background-color: #ffffff;
+      color: #475569;
+      border: 1px solid #e2e8f0;
+    }
+    .tab-inactive:hover {
+      background-color: #f8fafc;
+      color: #1b4332;
+    }
+
+    /* A4 Paper Simulation on Screen */
+    .a4-sheet-landscape {
+      width: 297mm;
+      min-height: 210mm;
+      padding: 12mm 14mm;
+      background: white;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+      margin: 0 auto 24px auto;
+      box-sizing: border-box;
+    }
+    .a4-sheet-portrait {
+      width: 210mm;
+      min-height: 297mm;
+      padding: 14mm 14mm;
+      background: white;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+      margin: 0 auto 24px auto;
+      box-sizing: border-box;
+    }
+
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #printPreviewContainer, #printPreviewContainer * {
+        visibility: visible;
+      }
+      #printPreviewContainer {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: white !important;
+      }
+      .a4-sheet-landscape, .a4-sheet-portrait {
+        box-shadow: none !important;
+        margin: 0 !important;
+        width: 100% !important;
+        min-height: auto !important;
+        page-break-after: always;
+      }
+      .a4-sheet-landscape:last-child, .a4-sheet-portrait:last-child {
+        page-break-after: auto;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- =====================================================================
+       KONFIGURASI FIREBASE (OPSIONAL UNTUK SINKRONISASI MULTI-HP REAL-TIME)
+       =====================================================================
+       1. Jika dibiarkan kosong (apiKey: ""), aplikasi OTOMATIS jalan lancar
+          menggunakan penyimpanan browser (localStorage) tanpa error.
+       2. Jika ingin data dari semua HP pengemudi langsung masuk ke 1 database
+          cloud yang sama, tempelkan firebaseConfig dari Firebase Console Anda
+          pada objek MANUAL_FIREBASE_CONFIG di bawah ini.
+  ====================================================================== -->
+  <script>
+    const MANUAL_FIREBASE_CONFIG = {
+      apiKey: "AIzaSyAyWy7-TDj25Z7wueO3uH4s7vpYP3DlTnI",
+      authDomain: "odometer-bbm.firebaseapp.com",
+      projectId: "odometer-bbm",
+      storageBucket: "odometer-bbm.firebasestorage.app",
+      messagingSenderId: "1033502885915",
+      appId: "1:1033502885915:web:7cbe54f5407d8fe71550be"
+    };
+  </script>
+
+  <!-- TOP NAVBAR -->
+  <header class="bg-[#1b4332] text-white shadow-md sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-300 font-extrabold text-lg">
+          KM
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-bold tracking-tight leading-tight">Log Odometer & Pengisian BBM</h1>
+          <div class="flex flex-wrap items-center gap-2 text-xs text-emerald-200 mt-0.5">
+            <span id="syncBadge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-900/80 border border-emerald-500/40 text-emerald-200 font-medium">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span id="syncText">Mode Lokal (Siap Pakai)</span>
+            </span>
+            <span id="lockedEventBadge" class="hidden inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400 text-slate-900 font-extrabold text-[11px]">
+              Terkunci: <span id="lockedEventNameText"></span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button onclick="openEventModal()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-800 hover:bg-emerald-700 border border-emerald-500/40 text-white font-bold text-xs sm:text-sm transition">
+          <span>Kelola Kegiatan & Link</span>
+        </button>
+        <button onclick="openPrintModal('both')" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xs sm:text-sm shadow transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+          <span>Cetak / Preview A4</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-7xl w-full mx-auto px-4 py-5 flex-1">
+
+    <!-- GLOBAL EVENT FILTER BAR -->
+    <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-2.5 flex-1">
+        <span class="text-xs font-extrabold uppercase tracking-wider text-[#1b4332]">Filter Tampilan Kegiatan:</span>
+        <select id="globalEventFilter" onchange="onGlobalEventFilterChange()" class="rounded-xl border border-emerald-300 bg-emerald-50/60 px-3.5 py-2 text-xs sm:text-sm font-bold text-[#1b4332] focus:ring-2 focus:ring-emerald-600 outline-none min-w-[230px]">
+          <option value="ALL">Semua Kegiatan (Terkelompok per Kegiatan)</option>
+        </select>
+      </div>
+      <div class="text-xs text-slate-500">
+        Setiap kegiatan terpisah otomatis meski berlangsung di tanggal yang sama.
+      </div>
+    </div>
+
+    <!-- 2 MAIN SHEET TABS -->
+    <div class="grid grid-cols-2 gap-2.5 mb-5 max-w-xl">
+      <button id="btnTabOdo" onclick="switchMainTab('odo')" class="tab-active py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2">
+        <span>1. Sheet Odometer</span>
+        <span id="badgeCountOdo" class="px-2 py-0.5 text-[11px] rounded-full bg-white/20">0</span>
+      </button>
+      <button id="btnTabBbm" onclick="switchMainTab('bbm')" class="tab-inactive py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2">
+        <span>2. Sheet Pengisian BBM</span>
+        <span id="badgeCountBbm" class="px-2 py-0.5 text-[11px] rounded-full bg-slate-200 text-slate-700">0</span>
+      </button>
+    </div>
+
+    <!-- ===================================================================
+         SECTION 1: SHEET ODOMETER
+    ==================================================================== -->
+    <section id="sectionOdo" class="space-y-5">
+
+      <!-- KPI CARDS ODOMETER -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Pengisian BBM</div>
+          <div id="kpiOdoLiter" class="text-xl sm:text-2xl font-extrabold text-[#1b4332] mt-1">0,0 L</div>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Biaya BBM</div>
+          <div id="kpiOdoBiaya" class="text-xl sm:text-2xl font-extrabold text-[#1b4332] mt-1">Rp 0</div>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Rata-rata Harga / Liter</div>
+          <div id="kpiOdoAvg" class="text-xl sm:text-2xl font-extrabold text-amber-600 mt-1">Rp 0</div>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Odometer Tertinggi</div>
+          <div id="kpiOdoMax" class="text-xl sm:text-2xl font-extrabold text-slate-800 mt-1">0 km</div>
+        </div>
+      </div>
+
+      <!-- FORM INPUT ODOMETER -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-emerald-50/80 border-b border-emerald-100 px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="font-bold text-slate-800 text-sm sm:text-base">Form Input Perjalanan & Odometer</h2>
+            <p class="text-xs text-slate-500">Pilih Kegiatan & Nama Pengemudi agar laporan terpisah rapi per kegiatan & per nama (A–Z).</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" onclick="openEventModal()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 hover:bg-amber-200 transition">
+              + Tambah Kegiatan
+            </button>
+            <button type="button" onclick="openDriverModal()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-[#1b4332] hover:bg-emerald-100 transition">
+              + Kelola Nama Pengemudi
+            </button>
+          </div>
+        </div>
+
+        <form id="formOdo" onsubmit="handleSaveOdo(event)" class="p-5 space-y-4">
+          <!-- PILIHAN NAMA KEGIATAN -->
+          <div class="bg-amber-50/70 border border-amber-200 p-3.5 rounded-xl">
+            <label class="block text-xs font-extrabold text-amber-950 mb-1">Nama Kegiatan / Penugasan <span class="text-red-500">*</span></label>
+            <select id="odoEvent" onchange="syncEventSelection('odoEvent')" required class="w-full rounded-xl border border-amber-300 px-3.5 py-2.5 text-sm font-bold text-slate-900 bg-white focus:ring-2 focus:ring-emerald-600 outline-none">
+              <option value="">-- Pilih Nama Kegiatan --</option>
+            </select>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Tanggal <span class="text-red-500">*</span></label>
+              <input type="date" id="odoTanggal" required class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-none" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Nama Pengemudi <span class="text-red-500">*</span></label>
+              <select id="odoDriver" onchange="autoFillPlatByDriver('odoDriver', 'odoPlat')" required class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm bg-white focus:ring-2 focus:ring-emerald-600 outline-none">
+                <option value="">-- Pilih Pengemudi --</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">No. Plat <span class="text-red-500">*</span></label>
+              <input type="text" id="odoPlat" placeholder="Contoh: BK 1234 AB" required class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm uppercase focus:ring-2 focus:ring-emerald-600 outline-none" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Odometer Awal (km) <span class="text-red-500">*</span></label>
+              <input type="number" id="odoAwal" min="0" placeholder="45100" required class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-emerald-600 outline-none" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Odometer Saat Isi BBM (km)</label>
+              <input type="number" id="odoIsi" min="0" placeholder="Kosongkan jika tidak isi" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-emerald-600 outline-none" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Odometer Sampai Tujuan (km) <span class="text-red-500">*</span></label>
+              <input type="number" id="odoAkhir" min="0" placeholder="45290" required class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-emerald-600 outline-none" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Jumlah BBM (Liter)</label>
+              <input type="number" id="odoLiter" step="0.01" min="0" oninput="calcOdoPreview()" placeholder="0.0" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-emerald-600 outline-none" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Biaya BBM (Rp)</label>
+              <input type="number" id="odoBiaya" min="0" oninput="calcOdoPreview()" placeholder="0" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-emerald-600 outline-none" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Harga per Liter (Otomatis)</label>
+              <div id="odoHargaPerLiterPreview" class="w-full rounded-xl bg-slate-100 border border-slate-200 px-3.5 py-2.5 text-sm font-bold text-slate-700">
+                Rp 0 / L
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Keterangan</label>
+            <input type="text" id="odoKet" placeholder="Contoh: Isi ke-1 Pertalite SPBU Amplas" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-emerald-600 outline-none" />
+          </div>
+
+          <div class="flex flex-wrap items-center justify-end gap-2 pt-2">
+            <button type="reset" onclick="resetOdoForm()" class="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-semibold text-xs sm:text-sm hover:bg-slate-50">
+              Reset
+            </button>
+            <button type="submit" class="px-6 py-2.5 rounded-xl bg-[#1b4332] hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-md transition">
+              + Simpan Data Odometer
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- FILTER & TOOLBAR ODOMETER -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2 flex-1">
+          <select id="filterOdoDriver" onchange="renderOdoTable()" class="rounded-xl border border-slate-300 px-3 py-2 text-xs sm:text-sm bg-white font-medium">
+            <option value="ALL">Semua Pengemudi</option>
+          </select>
+
+          <div class="inline-flex rounded-xl border border-slate-300 overflow-hidden text-xs font-bold">
+            <button id="sortByNameBtn" onclick="setOdoSort('name')" class="px-3 py-2 bg-[#1b4332] text-white">Kelompok Kegiatan & Nama (A–Z)</button>
+            <button id="sortByTimeBtn" onclick="setOdoSort('time')" class="px-3 py-2 bg-white text-slate-600 hover:bg-slate-50">Terbaru</button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="openPrintModal('odo')" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs transition">
+            <span>Cetak A4</span>
+          </button>
+          <button onclick="exportOdoCSV()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs transition">
+            <span>Export Excel (.csv)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- TABEL DESKTOP & KARTU MOBILE ODOMETER -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-[#1b4332] text-white uppercase tracking-wider text-[11px]">
+                <th class="py-3 px-3">Kegiatan</th>
+                <th class="py-3 px-3">Tanggal</th>
+                <th class="py-3 px-3">Nama Pengemudi</th>
+                <th class="py-3 px-3">No. Plat</th>
+                <th class="py-3 px-3 text-right">Odo Awal</th>
+                <th class="py-3 px-3 text-right">Odo Isi BBM</th>
+                <th class="py-3 px-3 text-right">Odo Tujuan</th>
+                <th class="py-3 px-3 text-right">Liter</th>
+                <th class="py-3 px-3 text-right">Biaya BBM</th>
+                <th class="py-3 px-3 text-right">Harga/L</th>
+                <th class="py-3 px-3">Keterangan</th>
+                <th class="py-3 px-3 text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="odoTableBody" class="divide-y divide-slate-200"></tbody>
+          </table>
+        </div>
+        <div id="odoMobileList" class="md:hidden divide-y divide-slate-200"></div>
+      </div>
+    </section>
+
+    <!-- ===================================================================
+         SECTION 2: SHEET PENGISIAN BBM (TERPISAH PER KEGIATAN)
+    ==================================================================== -->
+    <section id="sectionBbm" class="hidden space-y-5">
+
+      <!-- KPI CARDS BBM -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Transaksi Isi BBM</div>
+          <div id="kpiBbmCount" class="text-xl sm:text-2xl font-extrabold text-[#1b4332] mt-1">0 x</div>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Nominal BBM</div>
+          <div id="kpiBbmNominal" class="text-xl sm:text-2xl font-extrabold text-[#1b4332] mt-1">Rp 0</div>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Liter BBM</div>
+          <div id="kpiBbmLiter" class="text-xl sm:text-2xl font-extrabold text-amber-600 mt-1">0,00 L</div>
+        </div>
+      </div>
+
+      <!-- BANNER HARGA BBM NASIONAL PER ZONA -->
+      <div class="bg-gradient-to-r from-[#1b4332] to-emerald-800 text-white rounded-2xl p-4 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded bg-amber-400 text-slate-900 font-extrabold text-[10px] uppercase">Tarif Aktif</span>
+            <span id="activeZoneLabel" class="font-bold text-sm">Sumatera Utara & Aceh (Medan, Lhokseumawe, Banda Aceh)</span>
+          </div>
+          <p id="activePriceSummary" class="text-xs text-emerald-100 mt-1">
+            Pertalite: Rp 10.000 | Pertamax: Rp 12.700 | Pertamax Turbo: Rp 13.800 | Biosolar: Rp 6.800 | Dexlite: Rp 13.700 | Pertamina Dex: Rp 14.000
+          </p>
+        </div>
+        <button onclick="openPriceModal()" class="px-3.5 py-2 rounded-xl bg-white text-[#1b4332] hover:bg-emerald-50 font-bold text-xs shadow transition">
+          Atur / Update Harga BBM
+        </button>
+      </div>
+
+      <!-- FORM INPUT PENGISIAN BBM -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-amber-50/80 border-b border-amber-100 px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="font-bold text-slate-800 text-sm sm:text-base">Form Input Pengisian BBM (SPBU)</h2>
+            <p class="text-xs text-slate-500">Pilih Nama Kegiatan, Jenis BBM, & Nominal (Rp) — Liter terhitung otomatis sesuai tarif wilayah.</p>
+          </div>
+          <button type="button" onclick="openEventModal()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 transition">
+            + Tambah Kegiatan
+          </button>
+        </div>
+
+        <form id="formBbm" onsubmit="handleSaveBbm(event)" class="p-5 space-y-4">
+          <!-- PILIHAN NAMA KEGIATAN -->
+          <div class="bg-amber-50/70 border border-amber-200 p-3.5 rounded-xl">
+            <label class="block text-xs font-extrabold text-amber-950 mb-1">Nama Kegiatan / Penugasan <span class="text-red-500">*</span></label>
+            <select id="bbmEvent" onchange="syncEventSelection('bbmEvent')" required class="w-full rounded-xl border border-amber-300 px-3.5 py-2.5 text-sm font-bold text-slate-900 bg-white focus:ring-2 focus:ring-emerald-600 outline-none">
+              <option value="">-- Pilih Nama Kegiatan --</option>
+            </select>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Tanggal <span class="text-red-500">*</span></label>
+              <input type="date" id="bbmTanggal" required class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-emerald-600 outline-none" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Wilayah / Zona Tarif SPBU</label>
+              <select id="bbmZone" onchange="onZoneChange()" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm bg-white font-semibold text-[#1b4332] focus:ring-2 focus:ring-emerald-600 outline-none">
+                <option value="SUMUT_ACEH">Sumatera Utara & Aceh (Medan, Lhokseumawe, Banda Aceh)</option>
+                <option value="FTZ_SABANG">FTZ Sabang (Kawasan Bebas)</option>
+                <option value="SUMBAR_RIAU">Sumatera Barat, Riau & Kepri</option>
+                <option value="JAWA_BALI">Jawa, Bali & Nusa Tenggara</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Pengisian SPBU Dimana <span class="text-red-500">*</span></label>
+              <input type="text" id="bbmSpbu" oninput="detectZoneFromSpbu(this.value)" placeholder="Contoh: SPBU Lhokseumawe / SPBU Amplas" required class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-emerald-600 outline-none" />
+            </div>
+          </div>
+
+          <!-- QUICK BUTTONS JENIS BBM -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1.5">Jenis BBM <span class="text-red-500">*</span></label>
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2" id="bbmTypeButtons"></div>
+            <input type="hidden" id="bbmJenis" value="Pertalite" required />
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Nominal (Rp) <span class="text-red-500">*</span></label>
+              <input type="number" id="bbmNominal" min="1000" step="100" oninput="autoCalcBbmLiter()" placeholder="Contoh: 200000" required class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm font-bold focus:ring-2 focus:ring-emerald-600 outline-none" />
+              <p id="bbmUnitPriceHint" class="text-[11px] text-emerald-700 font-semibold mt-1">Acuan tarif: Rp 10.000 / Liter</p>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Liter (Otomatis / Bisa Disesuaikan) <span class="text-red-500">*</span></label>
+              <input type="number" id="bbmLiter" step="0.01" min="0.01" placeholder="20.00" required class="w-full rounded-xl border border-emerald-400 bg-emerald-50/40 px-3.5 py-2.5 text-sm font-extrabold text-[#1b4332] focus:ring-2 focus:ring-emerald-600 outline-none" />
+              <p class="text-[11px] text-slate-400 mt-1">Otomatis dihitung dari Nominal ÷ Harga Zona (bisa diedit manual).</p>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-end gap-2 pt-2">
+            <button type="reset" onclick="resetBbmForm()" class="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-semibold text-xs sm:text-sm hover:bg-slate-50">
+              Reset
+            </button>
+            <button type="submit" class="px-6 py-2.5 rounded-xl bg-[#1b4332] hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-md transition">
+              + Simpan Pengisian BBM
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- FILTER & EXPORT SHEET 2 -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2 flex-1">
+          <input type="text" id="filterBbmSearch" oninput="renderBbmTable()" placeholder="Cari lokasi SPBU..." class="rounded-xl border border-slate-300 px-3 py-2 text-xs sm:text-sm w-48 sm:w-64" />
+          <select id="filterBbmJenis" onchange="renderBbmTable()" class="rounded-xl border border-slate-300 px-3 py-2 text-xs sm:text-sm bg-white font-medium">
+            <option value="ALL">Semua Jenis BBM</option>
+            <option value="Pertalite">Pertalite</option>
+            <option value="Pertamax">Pertamax</option>
+            <option value="Pertamax Turbo">Pertamax Turbo</option>
+            <option value="Biosolar">Biosolar</option>
+            <option value="Dexlite">Dexlite</option>
+            <option value="Pertamina Dex">Pertamina Dex</option>
+          </select>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="openPrintModal('bbm')" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs transition">
+            <span>Cetak A4</span>
+          </button>
+          <button onclick="exportBbmCSV()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs transition">
+            <span>Export BBM (.csv)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- TABEL DESKTOP & KARTU MOBILE BBM -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-[#1b4332] text-white uppercase tracking-wider text-[11px]">
+                <th class="py-3 px-4">Kegiatan</th>
+                <th class="py-3 px-4">Tanggal</th>
+                <th class="py-3 px-4">Pengisian SPBU Dimana</th>
+                <th class="py-3 px-4 text-right">Nominal (Rp)</th>
+                <th class="py-3 px-4 text-right">Liter</th>
+                <th class="py-3 px-4 text-center">Jenis BBM</th>
+                <th class="py-3 px-4 text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="bbmTableBody" class="divide-y divide-slate-200"></tbody>
+          </table>
+        </div>
+        <div id="bbmMobileList" class="md:hidden divide-y divide-slate-200"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- =====================================================================
+       MODAL 1: EDIT ODOMETER
+  ====================================================================== -->
+  <div id="modalEditOdo" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+      <div class="bg-[#1b4332] text-white px-5 py-3.5 flex items-center justify-between">
+        <h3 class="font-bold text-sm sm:text-base">Edit Data Odometer</h3>
+        <button onclick="closeModal('modalEditOdo')" class="text-white/80 hover:text-white text-xl font-bold">&times;</button>
+      </div>
+      <form onsubmit="submitEditOdo(event)" class="p-5 space-y-4 overflow-y-auto">
+        <input type="hidden" id="editOdoId" />
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Nama Kegiatan</label>
+          <select id="editOdoEvent" required class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold bg-white"></select>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Tanggal</label>
+            <input type="date" id="editOdoTanggal" required class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Nama Pengemudi</label>
+            <select id="editOdoDriver" onchange="autoFillPlatByDriver('editOdoDriver', 'editOdoPlat')" required class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm bg-white"></select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">No. Plat</label>
+            <input type="text" id="editOdoPlat" required class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm uppercase" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Odometer Awal (km)</label>
+            <input type="number" id="editOdoAwal" required class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Odometer Saat Isi BBM (km)</label>
+            <input type="number" id="editOdoIsi" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Odometer Sampai Tujuan (km)</label>
+            <input type="number" id="editOdoAkhir" required class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Jumlah BBM (Liter)</label>
+            <input type="number" step="0.01" id="editOdoLiter" oninput="calcEditOdoPreview()" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Biaya BBM (Rp)</label>
+            <input type="number" id="editOdoBiaya" oninput="calcEditOdoPreview()" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+          <span class="font-semibold text-slate-600">Estimasi Harga / Liter:</span>
+          <span id="editOdoHargaPreview" class="font-extrabold text-[#1b4332]">Rp 0 / L</span>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Keterangan</label>
+          <input type="text" id="editOdoKet" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modalEditOdo')" class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold">Batal</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-[#1b4332] text-white text-xs font-bold">Simpan Perubahan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 2: EDIT PENGISIAN BBM
+  ====================================================================== -->
+  <div id="modalEditBbm" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden">
+      <div class="bg-[#1b4332] text-white px-5 py-3.5 flex items-center justify-between">
+        <h3 class="font-bold text-sm sm:text-base">Edit Pengisian BBM</h3>
+        <button onclick="closeModal('modalEditBbm')" class="text-white/80 hover:text-white text-xl font-bold">&times;</button>
+      </div>
+      <form onsubmit="submitEditBbm(event)" class="p-5 space-y-4">
+        <input type="hidden" id="editBbmId" />
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Nama Kegiatan</label>
+          <select id="editBbmEvent" required class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold bg-white"></select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Tanggal</label>
+          <input type="date" id="editBbmTanggal" required class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Wilayah / Zona Tarif</label>
+          <select id="editBbmZone" onchange="calcEditBbmLiter()" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm bg-white">
+            <option value="SUMUT_ACEH">Sumatera Utara & Aceh (Medan, Lhokseumawe, Banda Aceh)</option>
+            <option value="FTZ_SABANG">FTZ Sabang (Kawasan Bebas)</option>
+            <option value="SUMBAR_RIAU">Sumatera Barat, Riau & Kepri</option>
+            <option value="JAWA_BALI">Jawa, Bali & Nusa Tenggara</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Pengisian SPBU Dimana</label>
+          <input type="text" id="editBbmSpbu" required class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Jenis BBM</label>
+          <select id="editBbmJenis" onchange="calcEditBbmLiter()" required class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm bg-white">
+            <option value="Pertalite">Pertalite</option>
+            <option value="Pertamax">Pertamax</option>
+            <option value="Pertamax Turbo">Pertamax Turbo</option>
+            <option value="Biosolar">Biosolar</option>
+            <option value="Dexlite">Dexlite</option>
+            <option value="Pertamina Dex">Pertamina Dex</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Nominal (Rp)</label>
+            <input type="number" id="editBbmNominal" oninput="calcEditBbmLiter()" required class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Liter</label>
+            <input type="number" step="0.01" id="editBbmLiter" required class="w-full rounded-xl border border-emerald-400 bg-emerald-50/40 px-3 py-2 text-sm font-extrabold text-[#1b4332]" />
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modalEditBbm')" class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold">Batal</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-[#1b4332] text-white text-xs font-bold">Simpan Perubahan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 3: KELOLA MASTER KEGIATAN & LINK KHUSUS PER TIM
+  ====================================================================== -->
+  <div id="modalEvents" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+      <div class="bg-[#1b4332] text-white px-5 py-3.5 flex items-center justify-between">
+        <h3 class="font-bold text-sm sm:text-base">Kelola Daftar Kegiatan & Bagikan Link per Tim</h3>
+        <button onclick="closeModal('modalEvents')" class="text-white/80 hover:text-white text-xl font-bold">&times;</button>
+      </div>
+      <div class="p-5 space-y-4 overflow-y-auto">
+        <p class="text-xs text-slate-600 bg-emerald-50 p-3 rounded-xl border border-emerald-200">
+          Daftarkan nama kegiatan di bawah ini. Anda juga bisa menyalin <strong>Link Khusus</strong> untuk tiap kegiatan agar tim di lapangan tidak salah memilih kegiatan.
+        </p>
+
+        <form onsubmit="addMasterEvent(event)" class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <input type="text" id="newEventName" placeholder="Nama Kegiatan (misal: Kas Keliling Binjai)" required class="sm:col-span-2 rounded-xl border border-slate-300 px-3 py-2 text-xs" />
+          <input type="date" id="newEventDate" required class="rounded-xl border border-slate-300 px-3 py-2 text-xs" />
+          <button type="submit" class="sm:col-span-3 py-2.5 rounded-xl bg-[#1b4332] text-white font-bold text-xs">+ Tambah Kegiatan Baru</button>
+        </form>
+
+        <div id="masterEventList" class="divide-y divide-slate-200 border rounded-xl overflow-hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 4: KELOLA MASTER NAMA PENGEMUDI
+  ====================================================================== -->
+  <div id="modalDrivers" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+      <div class="bg-[#1b4332] text-white px-5 py-3.5 flex items-center justify-between">
+        <h3 class="font-bold text-sm">Master Nama Pengemudi & No. Plat</h3>
+        <button onclick="closeModal('modalDrivers')" class="text-white/80 hover:text-white text-xl font-bold">&times;</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <form onsubmit="addMasterDriver(event)" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <input type="text" id="newDriverName" placeholder="Nama Lengkap" required class="rounded-xl border border-slate-300 px-3 py-2 text-xs" />
+          <input type="text" id="newDriverPlat" placeholder="No. Plat (BK ...)" required class="rounded-xl border border-slate-300 px-3 py-2 text-xs uppercase" />
+          <button type="submit" class="sm:col-span-2 py-2 rounded-xl bg-[#1b4332] text-white font-bold text-xs">+ Tambah Pengemudi Resmi</button>
+        </form>
+        <div id="masterDriverList" class="divide-y divide-slate-200 max-h-60 overflow-y-auto border rounded-xl"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 5: ATUR / UPDATE HARGA BBM PER ZONA
+  ====================================================================== -->
+  <div id="modalPrices" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden">
+      <div class="bg-[#1b4332] text-white px-5 py-3.5 flex items-center justify-between">
+        <h3 class="font-bold text-sm">Atur Harga BBM Nasional per Wilayah</h3>
+        <button onclick="closeModal('modalPrices')" class="text-white/80 hover:text-white text-xl font-bold">&times;</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Pilih Wilayah / Zona</label>
+          <select id="priceModalZone" onchange="loadPriceModalInputs()" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm bg-white font-bold">
+            <option value="SUMUT_ACEH">Sumatera Utara & Aceh (Medan, Lhokseumawe, Banda Aceh)</option>
+            <option value="FTZ_SABANG">FTZ Sabang (Kawasan Bebas)</option>
+            <option value="SUMBAR_RIAU">Sumatera Barat, Riau & Kepri</option>
+            <option value="JAWA_BALI">Jawa, Bali & Nusa Tenggara</option>
+          </select>
+        </div>
+        <div id="priceInputsGrid" class="grid grid-cols-2 gap-3"></div>
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-2">
+          <button type="button" onclick="resetDefaultPrices()" class="px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-600">Reset Default</button>
+          <button type="button" onclick="saveZonePrices()" class="px-5 py-2 rounded-xl bg-[#1b4332] text-white text-xs font-bold">Simpan Tarif Wilayah</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 6: PREVIEW & CETAK A4 (PER KEGIATAN / SEMUA KEGIATAN)
+  ====================================================================== -->
+  <div id="modalPrint" class="fixed inset-0 bg-slate-900/80 z-50 hidden flex-col">
+    <div class="no-print bg-[#1b4332] text-white px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="font-bold text-sm">Preview A4:</span>
+        <select id="printEventFilter" onchange="renderPrintPreview()" class="rounded-lg bg-amber-300 text-slate-900 px-2.5 py-1.5 text-xs font-extrabold">
+          <option value="ALL">Semua Kegiatan (Terpisah per Halaman)</option>
+        </select>
+        <select id="printReportType" onchange="renderPrintPreview()" class="rounded-lg bg-white text-slate-900 px-2.5 py-1.5 text-xs font-bold">
+          <option value="both">Sheet 1 (Odometer) & Sheet 2 (BBM)</option>
+          <option value="odo">Hanya Sheet 1: Log Odometer</option>
+          <option value="bbm">Hanya Sheet 2: Log Pengisian BBM</option>
+        </select>
+        <select id="printOrientation" onchange="renderPrintPreview()" class="rounded-lg bg-white text-slate-900 px-2.5 py-1.5 text-xs font-bold">
+          <option value="landscape">A4 Landscape (297 × 210 mm)</option>
+          <option value="portrait">A4 Portrait (210 × 297 mm)</option>
+        </select>
+        <label class="inline-flex items-center gap-1.5 text-xs ml-1 cursor-pointer">
+          <input type="checkbox" id="printShowSign" checked onchange="toggleSignSettings(); renderPrintPreview();" class="rounded" />
+          <span>Tanda Tangan</span>
+        </label>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="window.print()" class="px-4 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-900 font-extrabold text-xs shadow">
+          Cetak / Simpan PDF (A4)
+        </button>
+        <button onclick="closeModal('modalPrint')" class="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold text-xs">
+          Tutup
+        </button>
+      </div>
+    </div>
+
+    <!-- PANEL PENGATURAN TANDA TANGAN (NO-PRINT) -->
+    <div id="printSignSettingsBar" class="no-print bg-emerald-950 text-white px-4 py-2.5 border-t border-emerald-800 flex flex-wrap items-center gap-2 text-xs">
+      <span class="font-bold text-amber-300 mr-1">Format TTD:</span>
+      <input type="text" id="signCity" value="Medan" oninput="renderPrintPreview()" placeholder="Kota" class="rounded bg-white/10 border border-white/20 px-2 py-1 text-white placeholder-white/50 w-24 focus:outline-none focus:border-amber-300" />
+      <span class="text-emerald-400">|</span>
+      <input type="text" id="signLeftHeader" value="Telah diperhitungkan" oninput="renderPrintPreview()" placeholder="Header Kiri" class="rounded bg-white/10 border border-white/20 px-2 py-1 text-white placeholder-white/50 w-36 focus:outline-none focus:border-amber-300" />
+      <input type="text" id="signLeftUnit" value="Kantor Perwakilan Bank Indonesia Provinsi Sumatera Utara" oninput="renderPrintPreview()" placeholder="Unit / Kantor Kiri" class="rounded bg-white/10 border border-white/20 px-2 py-1 text-white placeholder-white/50 w-44 focus:outline-none focus:border-amber-300" />
+      <input type="text" id="signLeftName" value="" oninput="renderPrintPreview()" placeholder="Nama Kiri (Bergaris Bawah)" class="rounded bg-white/10 border border-white/20 px-2 py-1 text-white placeholder-white/50 w-40 focus:outline-none focus:border-amber-300" />
+      <input type="text" id="signLeftRole" value="Manajer" oninput="renderPrintPreview()" placeholder="Jabatan Bawah Kiri" class="rounded bg-white/10 border border-white/20 px-2 py-1 text-white placeholder-white/50 w-28 focus:outline-none focus:border-amber-300" />
+      <span class="text-emerald-400">|</span>
+      <input type="text" id="signRightSubHeader" value="Yang mempertanggungjawabkan" oninput="renderPrintPreview()" placeholder="Keterangan Kanan" class="rounded bg-white/10 border border-white/20 px-2 py-1 text-white placeholder-white/50 w-44 focus:outline-none focus:border-amber-300" />
+      <input type="text" id="signRightName" value="Mhd Andy Syahputra Siregar" oninput="renderPrintPreview()" placeholder="Nama Kanan (Bergaris Bawah)" class="rounded bg-white/10 border border-white/20 px-2 py-1 text-white placeholder-white/50 w-44 focus:outline-none focus:border-amber-300" />
+      <input type="text" id="signRightRole" value="Pelaksana" oninput="renderPrintPreview()" placeholder="Jabatan Bawah Kanan" class="rounded bg-white/10 border border-white/20 px-2 py-1 text-white placeholder-white/50 w-28 focus:outline-none focus:border-amber-300" />
+    </div>
+
+    <div id="printPreviewContainer" class="flex-1 overflow-auto p-6 bg-slate-700"></div>
+  </div>
+
+  <!-- =====================================================================
+       SCRIPT LOGIKA APLIKASI (MULTI-KEGIATAN + STANDALONE + FIREBASE)
+  ====================================================================== -->
+  <script type="module">
+    const DEFAULT_EVENTS = [
+      { id: "ev1", name: "Kegiatan 1 - Kas Keliling Binjai", date: "2026-11-23" },
+      { id: "ev2", name: "Kegiatan 2 - Edukasi CBP Rupiah Medan", date: "2026-11-23" },
+      { id: "ev3", name: "Kegiatan 3 - Monitoring PJPUR Deli Serdang", date: "2026-11-23" }
+    ];
+
+    const DEFAULT_DRIVERS = [
+      { name: "Andi Pratama", plat: "BK 5678 CD" },
+      { name: "Budi Santoso", plat: "BK 1234 AB" },
+      { name: "Dedi Kurniawan", plat: "BK 3456 GH" },
+      { name: "Rina Marlina", plat: "BK 7890 IJ" },
+      { name: "Siti Rahma", plat: "BK 9012 EF" }
+    ];
+
+    const DEFAULT_ZONE_PRICES = {
+      SUMUT_ACEH: {
+        label: "Sumatera Utara & Aceh (Medan, Lhokseumawe, Banda Aceh)",
+        prices: {
+          "Pertalite": 10000,
+          "Pertamax": 12700,
+          "Pertamax Turbo": 13800,
+          "Biosolar": 6800,
+          "Dexlite": 13700,
+          "Pertamina Dex": 14000
+        }
+      },
+      FTZ_SABANG: {
+        label: "FTZ Sabang (Kawasan Bebas)",
+        prices: {
+          "Pertalite": 9300,
+          "Pertamax": 11500,
+          "Pertamax Turbo": 12500,
+          "Biosolar": 6800,
+          "Dexlite": 12400,
+          "Pertamina Dex": 12700
+        }
+      },
+      SUMBAR_RIAU: {
+        label: "Sumatera Barat, Riau & Kepri",
+        prices: {
+          "Pertalite": 10000,
+          "Pertamax": 13000,
+          "Pertamax Turbo": 14100,
+          "Biosolar": 6800,
+          "Dexlite": 14000,
+          "Pertamina Dex": 14300
+        }
+      },
+      JAWA_BALI: {
+        label: "Jawa, Bali & Nusa Tenggara",
+        prices: {
+          "Pertalite": 10000,
+          "Pertamax": 12400,
+          "Pertamax Turbo": 13500,
+          "Biosolar": 6800,
+          "Dexlite": 13400,
+          "Pertamina Dex": 13700
+        }
+      }
+    };
+
+    const SEED_ODO = [
+      { id: "o1", eventName: "Kegiatan 1 - Kas Keliling Binjai", tanggal: "2026-11-23", driver: "Budi Santoso", plat: "BK 1234 AB", odoAwal: 45100, odoIsi: 45140, odoAkhir: 45290, liter: 22.0, biaya: 220000, ket: "Isi ke-1 Pertalite SPBU Binjai" },
+      { id: "o2", eventName: "Kegiatan 1 - Kas Keliling Binjai", tanggal: "2026-11-23", driver: "Andi Pratama", plat: "BK 5678 CD", odoAwal: 12300, odoIsi: 12345, odoAkhir: 12490, liter: 20.0, biaya: 254000, ket: "Mobil Pengawalan Pertamax" },
+      { id: "o3", eventName: "Kegiatan 2 - Edukasi CBP Rupiah Medan", tanggal: "2026-11-23", driver: "Siti Rahma", plat: "BK 9012 EF", odoAwal: 8900, odoIsi: 8925, odoAkhir: 9060, liter: 15.0, biaya: 190500, ket: "Tim Edukasi Pertamax" },
+      { id: "o4", eventName: "Kegiatan 2 - Edukasi CBP Rupiah Medan", tanggal: "2026-11-23", driver: "Rina Marlina", plat: "BK 7890 IJ", odoAwal: 21500, odoIsi: 21530, odoAkhir: 21670, liter: 17.0, biaya: 170000, ket: "Logistik Spanduk & Souvenir" },
+      { id: "o5", eventName: "Kegiatan 3 - Monitoring PJPUR Deli Serdang", tanggal: "2026-11-23", driver: "Dedi Kurniawan", plat: "BK 3456 GH", odoAwal: 63400, odoIsi: 63450, odoAkhir: 63680, liter: 30.0, biaya: 204000, ket: "Biosolar SPBU Lubuk Pakam" }
+    ];
+
+    const SEED_BBM = [
+      { id: "b1", eventName: "Kegiatan 1 - Kas Keliling Binjai", tanggal: "2026-11-23", spbu: "SPBU 14.207.181 Binjai", nominal: 220000, liter: 22.0, jenis: "Pertalite", zone: "SUMUT_ACEH" },
+      { id: "b2", eventName: "Kegiatan 2 - Edukasi CBP Rupiah Medan", tanggal: "2026-11-23", spbu: "SPBU 14.201.114 Ringroad Medan", nominal: 190500, liter: 15.0, jenis: "Pertamax", zone: "SUMUT_ACEH" },
+      { id: "b3", eventName: "Kegiatan 3 - Monitoring PJPUR Deli Serdang", tanggal: "2026-11-23", spbu: "SPBU 14.205.140 Lubuk Pakam", nominal: 204000, liter: 30.0, jenis: "Biosolar", zone: "SUMUT_ACEH" }
+    ];
+
+    let eventsList = [];
+    let odoLogs = [];
+    let bbmLogs = [];
+    let drivers = [];
+    let zonePrices = JSON.parse(JSON.stringify(DEFAULT_ZONE_PRICES));
+    let odoSortMode = "name";
+    let lockedEventParam = null;
+    let useCloud = false;
+    let db = null;
+    let firestoreFns = null;
+
+    const STORAGE_KEYS = {
+      EVENTS: "app_odo_events_v2",
+      ODO: "app_odo_logs_v2",
+      BBM: "app_bbm_logs_v2",
+      DRIVERS: "app_odo_drivers_v2",
+      PRICES: "app_bbm_prices_v2"
+    };
+
+    const fmtRp = (n) => "Rp " + Math.round(Number(n) || 0).toLocaleString("id-ID");
+
+    function angkaKeKata(n) {
+      n = Math.floor(Math.abs(Number(n) || 0));
+      const satuan = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
+      if (n < 12) return satuan[n];
+      if (n < 20) return angkaKeKata(n - 10) + " Belas";
+      if (n < 100) return satuan[Math.floor(n / 10)] + " Puluh" + (n % 10 !== 0 ? " " + angkaKeKata(n % 10) : "");
+      if (n < 200) return "Seratus" + (n % 100 !== 0 ? " " + angkaKeKata(n - 100) : "");
+      if (n < 1000) return satuan[Math.floor(n / 100)] + " Ratus" + (n % 100 !== 0 ? " " + angkaKeKata(n % 100) : "");
+      if (n < 2000) return "Seribu" + (n % 1000 !== 0 ? " " + angkaKeKata(n - 1000) : "");
+      if (n < 1000000) return angkaKeKata(Math.floor(n / 1000)) + " Ribu" + (n % 1000 !== 0 ? " " + angkaKeKata(n % 1000) : "");
+      if (n < 1000000000) return angkaKeKata(Math.floor(n / 1000000)) + " Juta" + (n % 1000000 !== 0 ? " " + angkaKeKata(n % 1000000) : "");
+      if (n < 1000000000000) return angkaKeKata(Math.floor(n / 1000000000)) + " Miliar" + (n % 1000000000 !== 0 ? " " + angkaKeKata(n % 1000000000) : "");
+      return angkaKeKata(Math.floor(n / 1000000000000)) + " Triliun" + (n % 1000000000000 !== 0 ? " " + angkaKeKata(n % 1000000000000) : "");
+    }
+
+    function terbilangRupiah(nominal) {
+      const val = Math.round(Number(nominal) || 0);
+      if (val === 0) return "Nol Rupiah";
+      return angkaKeKata(val).replace(/\s+/g, " ").trim() + " Rupiah";
+    }
+
+    window.toggleSignSettings = function() {
+      const checked = document.getElementById("printShowSign").checked;
+      const bar = document.getElementById("printSignSettingsBar");
+      if (bar) bar.style.display = checked ? "flex" : "none";
+    };
+    const fmtNum = (n, dec = 0) => (Number(n) || 0).toLocaleString("id-ID", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    const fmtDate = (iso) => {
+      if (!iso) return "-";
+      const [y, m, d] = iso.split("-");
+      const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+      return `${d}-${months[parseInt(m, 10) - 1]}-${y}`;
+    };
+    const toTitleCase = (str) => str.trim().replace(/\s+/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+
+    function checkUrlEventLock() {
+      const params = new URLSearchParams(window.location.search);
+      const keg = params.get("kegiatan");
+      if (keg) {
+        lockedEventParam = decodeURIComponent(keg);
+      }
+    }
+
+    async function initStorage() {
+      checkUrlEventLock();
+
+      const hasManualFirebase = MANUAL_FIREBASE_CONFIG && MANUAL_FIREBASE_CONFIG.apiKey && MANUAL_FIREBASE_CONFIG.projectId;
+      if (hasManualFirebase) {
+        try {
+          const appMod = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+          const authMod = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
+          const fsMod = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+
+          const app = appMod.initializeApp(MANUAL_FIREBASE_CONFIG);
+          const auth = authMod.getAuth(app);
+          db = fsMod.getFirestore(app);
+          firestoreFns = fsMod;
+          await authMod.signInAnonymously(auth);
+          useCloud = true;
+
+          document.getElementById("syncText").textContent = "Cloud Aktif (Multi-HP Real-Time)";
+
+          fsMod.onSnapshot(fsMod.collection(db, "odo_logs"), (snap) => {
+            odoLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            refreshAllViews();
+          });
+          fsMod.onSnapshot(fsMod.collection(db, "bbm_logs"), (snap) => {
+            bbmLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            refreshAllViews();
+          });
+          fsMod.onSnapshot(fsMod.doc(db, "settings", "master"), (docSnap) => {
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              if (data.drivers) drivers = data.drivers;
+              if (data.zonePrices) zonePrices = data.zonePrices;
+              if (data.eventsList) eventsList = data.eventsList;
+            } else {
+              drivers = [...DEFAULT_DRIVERS];
+              eventsList = [...DEFAULT_EVENTS];
+              fsMod.setDoc(fsMod.doc(db, "settings", "master"), { drivers, zonePrices, eventsList });
+            }
+            populateEventSelects();
+            populateDriverSelects();
+            updatePriceBanner();
+          });
+          return;
+        } catch (err) {
+          console.warn("Firebase gagal terhubung, beralih ke penyimpanan lokal:", err);
+        }
+      }
+
+      const savedEvents = localStorage.getItem(STORAGE_KEYS.EVENTS);
+      const savedOdo = localStorage.getItem(STORAGE_KEYS.ODO);
+      const savedBbm = localStorage.getItem(STORAGE_KEYS.BBM);
+      const savedDrivers = localStorage.getItem(STORAGE_KEYS.DRIVERS);
+      const savedPrices = localStorage.getItem(STORAGE_KEYS.PRICES);
+
+      eventsList = savedEvents ? JSON.parse(savedEvents) : [...DEFAULT_EVENTS];
+      odoLogs = savedOdo ? JSON.parse(savedOdo) : [...SEED_ODO];
+      bbmLogs = savedBbm ? JSON.parse(savedBbm) : [...SEED_BBM];
+      drivers = savedDrivers ? JSON.parse(savedDrivers) : [...DEFAULT_DRIVERS];
+      if (savedPrices) zonePrices = JSON.parse(savedPrices);
+
+      persistLocal();
+      populateEventSelects();
+      populateDriverSelects();
+      updatePriceBanner();
+      refreshAllViews();
+    }
+
+    function persistLocal() {
+      localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(eventsList));
+      localStorage.setItem(STORAGE_KEYS.ODO, JSON.stringify(odoLogs));
+      localStorage.setItem(STORAGE_KEYS.BBM, JSON.stringify(bbmLogs));
+      localStorage.setItem(STORAGE_KEYS.DRIVERS, JSON.stringify(drivers));
+      localStorage.setItem(STORAGE_KEYS.PRICES, JSON.stringify(zonePrices));
+    }
+
+    async function saveMasterSettings() {
+      if (useCloud && db && firestoreFns) {
+        await firestoreFns.setDoc(firestoreFns.doc(db, "settings", "master"), { drivers, zonePrices, eventsList }, { merge: true });
+      } else {
+        persistLocal();
+      }
+    }
+
+    async function saveRecord(collectionName, item, isEdit = false) {
+      if (useCloud && db && firestoreFns) {
+        const { id, ...payload } = item;
+        if (isEdit && id) {
+          await firestoreFns.setDoc(firestoreFns.doc(db, collectionName, id), payload, { merge: true });
+        } else {
+          await firestoreFns.addDoc(firestoreFns.collection(db, collectionName), payload);
+        }
+      } else {
+        if (collectionName === "odo_logs") {
+          if (isEdit) {
+            odoLogs = odoLogs.map(x => x.id === item.id ? item : x);
+          } else {
+            item.id = "o_" + Date.now();
+            odoLogs.push(item);
+          }
+        } else {
+          if (isEdit) {
+            bbmLogs = bbmLogs.map(x => x.id === item.id ? item : x);
+          } else {
+            item.id = "b_" + Date.now();
+            bbmLogs.push(item);
+          }
+        }
+        persistLocal();
+        refreshAllViews();
+      }
+    }
+
+    async function deleteRecord(collectionName, id) {
+      if (!confirm("Hapus catatan ini?")) return;
+      if (useCloud && db && firestoreFns) {
+        await firestoreFns.deleteDoc(firestoreFns.doc(db, collectionName, id));
+      } else {
+        if (collectionName === "odo_logs") {
+          odoLogs = odoLogs.filter(x => x.id !== id);
+        } else {
+          bbmLogs = bbmLogs.filter(x => x.id !== id);
+        }
+        persistLocal();
+        refreshAllViews();
+      }
+    }
+
+    function populateEventSelects() {
+      if (lockedEventParam && !eventsList.some(e => e.name === lockedEventParam)) {
+        eventsList.push({ id: "ev_" + Date.now(), name: lockedEventParam, date: new Date().toISOString().slice(0, 10) });
+      }
+
+      const sortedEvents = [...eventsList].sort((a, b) => a.name.localeCompare(b.name));
+      const formSelects = ["odoEvent", "bbmEvent", "editOdoEvent", "editBbmEvent"];
+
+      formSelects.forEach(id => {
+        const el = document.getElementById(id);
+        const prev = el.value;
+        el.innerHTML = '<option value="">-- Pilih Nama Kegiatan --</option>' +
+          sortedEvents.map(ev => `<option value="${ev.name}">${ev.name} (${fmtDate(ev.date)})</option>`).join("");
+        if (lockedEventParam && (id === "odoEvent" || id === "bbmEvent")) {
+          el.value = lockedEventParam;
+        } else if (prev) {
+          el.value = prev;
+        }
+      });
+
+      const globalFilter = document.getElementById("globalEventFilter");
+      const prevGlobal = globalFilter.value;
+      globalFilter.innerHTML = '<option value="ALL">Semua Kegiatan (Terkelompok per Kegiatan)</option>' +
+        sortedEvents.map(ev => `<option value="${ev.name}">${ev.name}</option>`).join("");
+      if (lockedEventParam) {
+        globalFilter.value = lockedEventParam;
+        document.getElementById("lockedEventBadge").classList.remove("hidden");
+        document.getElementById("lockedEventNameText").textContent = lockedEventParam;
+      } else if (prevGlobal) {
+        globalFilter.value = prevGlobal;
+      }
+
+      const printFilter = document.getElementById("printEventFilter");
+      printFilter.innerHTML = '<option value="ALL">Semua Kegiatan (Terpisah per Halaman)</option>' +
+        sortedEvents.map(ev => `<option value="${ev.name}">Hanya: ${ev.name}</option>`).join("");
+
+      const listEl = document.getElementById("masterEventList");
+      const baseUrl = window.location.origin + window.location.pathname;
+      listEl.innerHTML = sortedEvents.map(ev => {
+        const shareUrl = `${baseUrl}?kegiatan=${encodeURIComponent(ev.name)}`;
+        return `
+          <div class="p-3 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div>
+              <div class="font-bold text-slate-800">${ev.name}</div>
+              <div class="text-[11px] text-slate-500">Tanggal: ${fmtDate(ev.date)}</div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button type="button" onclick="copyEventLink('${shareUrl.replace(/'/g, "\\'")}', '${ev.name.replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold">
+                Salin Link Tim
+              </button>
+              <button type="button" onclick="removeMasterEvent('${ev.id}')" class="px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-bold">
+                Hapus
+              </button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    window.syncEventSelection = function(sourceId) {
+      const val = document.getElementById(sourceId).value;
+      if (!val) return;
+      document.getElementById("odoEvent").value = val;
+      document.getElementById("bbmEvent").value = val;
+    };
+
+    window.onGlobalEventFilterChange = function() {
+      const val = document.getElementById("globalEventFilter").value;
+      if (val !== "ALL") {
+        document.getElementById("odoEvent").value = val;
+        document.getElementById("bbmEvent").value = val;
+      }
+      refreshAllViews();
+    };
+
+    window.openEventModal = function() {
+      populateEventSelects();
+      document.getElementById("newEventDate").valueAsDate = new Date();
+      openModal("modalEvents");
+    };
+
+    window.addMasterEvent = async function(e) {
+      e.preventDefault();
+      const rawName = document.getElementById("newEventName").value.trim().replace(/\s+/g, " ");
+      const dateVal = document.getElementById("newEventDate").value;
+      if (!rawName) return;
+
+      if (!eventsList.some(ev => ev.name.toLowerCase() === rawName.toLowerCase())) {
+        eventsList.push({ id: "ev_" + Date.now(), name: rawName, date: dateVal });
+      }
+      await saveMasterSettings();
+      document.getElementById("newEventName").value = "";
+      populateEventSelects();
+    };
+
+    window.removeMasterEvent = async function(id) {
+      eventsList = eventsList.filter(ev => ev.id !== id);
+      await saveMasterSettings();
+      populateEventSelects();
+    };
+
+    window.copyEventLink = function(url, eventName) {
+      navigator.clipboard.writeText(url).then(() => {
+        alert(`Link khusus untuk "${eventName}" berhasil disalin!\n\nBagikan link ini ke grup WA pengemudi kegiatan tersebut agar pilihan kegiatannya otomatis terpilih.`);
+      }).catch(() => {
+        prompt("Salin link khusus kegiatan ini:", url);
+      });
+    };
+
+    window.switchMainTab = function(tab) {
+      const isOdo = tab === "odo";
+      document.getElementById("sectionOdo").classList.toggle("hidden", !isOdo);
+      document.getElementById("sectionBbm").classList.toggle("hidden", isOdo);
+
+      document.getElementById("btnTabOdo").className = (isOdo ? "tab-active" : "tab-inactive") + " py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2";
+      document.getElementById("btnTabBbm").className = (!isOdo ? "tab-active" : "tab-inactive") + " py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2";
+    };
+
+    function populateDriverSelects() {
+      const sorted = [...drivers].sort((a, b) => a.name.localeCompare(b.name));
+      const selects = ["odoDriver", "editOdoDriver"];
+      selects.forEach(id => {
+        const el = document.getElementById(id);
+        const cur = el.value;
+        el.innerHTML = '<option value="">-- Pilih Pengemudi --</option>' +
+          sorted.map(d => `<option value="${d.name}">${d.name} (${d.plat})</option>`).join("");
+        if (cur) el.value = cur;
+      });
+
+      const filterEl = document.getElementById("filterOdoDriver");
+      const curFilter = filterEl.value;
+      filterEl.innerHTML = '<option value="ALL">Semua Pengemudi</option>' +
+        sorted.map(d => `<option value="${d.name}">${d.name}</option>`).join("");
+      if (curFilter) filterEl.value = curFilter;
+
+      const listEl = document.getElementById("masterDriverList");
+      listEl.innerHTML = sorted.map((d) => `
+        <div class="px-3.5 py-2.5 flex items-center justify-between text-xs bg-white">
+          <div>
+            <span class="font-bold text-slate-800">${d.name}</span>
+            <span class="ml-2 px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">${d.plat}</span>
+          </div>
+          <button type="button" onclick="removeMasterDriver('${d.name}')" class="text-red-500 hover:text-red-700 font-bold">Hapus</button>
+        </div>
+      `).join("");
+    }
+
+    window.autoFillPlatByDriver = function(selectId, platInputId) {
+      const name = document.getElementById(selectId).value;
+      const found = drivers.find(d => d.name === name);
+      if (found) {
+        document.getElementById(platInputId).value = found.plat;
+      }
+    };
+
+    window.openDriverModal = function() {
+      populateDriverSelects();
+      openModal("modalDrivers");
+    };
+
+    window.addMasterDriver = async function(e) {
+      e.preventDefault();
+      const rawName = document.getElementById("newDriverName").value;
+      const rawPlat = document.getElementById("newDriverPlat").value;
+      const cleanName = toTitleCase(rawName);
+      const cleanPlat = rawPlat.trim().toUpperCase();
+      if (!cleanName || !cleanPlat) return;
+
+      const existsIdx = drivers.findIndex(d => d.name.toLowerCase() === cleanName.toLowerCase());
+      if (existsIdx >= 0) {
+        drivers[existsIdx].plat = cleanPlat;
+      } else {
+        drivers.push({ name: cleanName, plat: cleanPlat });
+      }
+
+      await saveMasterSettings();
+      document.getElementById("newDriverName").value = "";
+      document.getElementById("newDriverPlat").value = "";
+      populateDriverSelects();
+    };
+
+    window.removeMasterDriver = async function(name) {
+      drivers = drivers.filter(d => d.name !== name);
+      await saveMasterSettings();
+      populateDriverSelects();
+    };
+
+    window.calcOdoPreview = function() {
+      const liter = parseFloat(document.getElementById("odoLiter").value) || 0;
+      const biaya = parseFloat(document.getElementById("odoBiaya").value) || 0;
+      const perL = liter > 0 && biaya > 0 ? biaya / liter : 0;
+      document.getElementById("odoHargaPerLiterPreview").textContent = fmtRp(perL) + " / L";
+    };
+
+    window.calcEditOdoPreview = function() {
+      const liter = parseFloat(document.getElementById("editOdoLiter").value) || 0;
+      const biaya = parseFloat(document.getElementById("editOdoBiaya").value) || 0;
+      const perL = liter > 0 && biaya > 0 ? biaya / liter : 0;
+      document.getElementById("editOdoHargaPreview").textContent = fmtRp(perL) + " / L";
+    };
+
+    window.resetOdoForm = function() {
+      const keepEvent = document.getElementById("odoEvent").value;
+      setTimeout(() => {
+        document.getElementById("odoTanggal").valueAsDate = new Date();
+        document.getElementById("odoEvent").value = lockedEventParam || keepEvent;
+        document.getElementById("odoHargaPerLiterPreview").textContent = "Rp 0 / L";
+      }, 10);
+    };
+
+    window.handleSaveOdo = async function(e) {
+      e.preventDefault();
+      const odoAwal = Number(document.getElementById("odoAwal").value);
+      const odoIsiRaw = document.getElementById("odoIsi").value;
+      const odoIsi = odoIsiRaw !== "" ? Number(odoIsiRaw) : null;
+      const odoAkhir = Number(document.getElementById("odoAkhir").value);
+
+      if (odoAkhir < odoAwal) {
+        alert("Odometer Sampai Tujuan tidak boleh lebih kecil dari Odometer Awal!");
+        return;
+      }
+
+      const item = {
+        eventName: document.getElementById("odoEvent").value,
+        tanggal: document.getElementById("odoTanggal").value,
+        driver: toTitleCase(document.getElementById("odoDriver").value),
+        plat: document.getElementById("odoPlat").value.trim().toUpperCase(),
+        odoAwal,
+        odoIsi,
+        odoAkhir,
+        liter: parseFloat(document.getElementById("odoLiter").value) || 0,
+        biaya: Number(document.getElementById("odoBiaya").value) || 0,
+        ket: document.getElementById("odoKet").value.trim()
+      };
+
+      await saveRecord("odo_logs", item, false);
+      const selectedEv = item.eventName;
+      document.getElementById("formOdo").reset();
+      setTimeout(() => {
+        document.getElementById("odoTanggal").valueAsDate = new Date();
+        document.getElementById("odoEvent").value = selectedEv;
+        document.getElementById("odoHargaPerLiterPreview").textContent = "Rp 0 / L";
+      }, 10);
+    };
+
+    window.setOdoSort = function(mode) {
+      odoSortMode = mode;
+      document.getElementById("sortByNameBtn").className = mode === "name" ? "px-3 py-2 bg-[#1b4332] text-white" : "px-3 py-2 bg-white text-slate-600 hover:bg-slate-50";
+      document.getElementById("sortByTimeBtn").className = mode === "time" ? "px-3 py-2 bg-[#1b4332] text-white" : "px-3 py-2 bg-white text-slate-600 hover:bg-slate-50";
+      renderOdoTable();
+    };
+
+    function getSortedFilteredOdo() {
+      const globalEv = document.getElementById("globalEventFilter").value;
+      const filterDriver = document.getElementById("filterOdoDriver").value;
+      let list = [...odoLogs];
+
+      if (globalEv && globalEv !== "ALL") {
+        list = list.filter(x => x.eventName === globalEv);
+      }
+      if (filterDriver && filterDriver !== "ALL") {
+        list = list.filter(x => x.driver === filterDriver);
+      }
+
+      if (odoSortMode === "name") {
+        list.sort((a, b) => {
+          const cmpEv = (a.eventName || "").localeCompare(b.eventName || "");
+          if (cmpEv !== 0) return cmpEv;
+          const cmpName = a.driver.localeCompare(b.driver);
+          if (cmpName !== 0) return cmpName;
+          const cmpDate = a.tanggal.localeCompare(b.tanggal);
+          if (cmpDate !== 0) return cmpDate;
+          return (a.odoAwal || 0) - (b.odoAwal || 0);
+        });
+      } else {
+        list.sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+      }
+      return list;
+    }
+
+    window.renderOdoTable = function() {
+      const list = getSortedFilteredOdo();
+      const tbody = document.getElementById("odoTableBody");
+      const mobList = document.getElementById("odoMobileList");
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="12" class="py-8 text-center text-slate-400">Belum ada data perjalanan pada filter ini.</td></tr>';
+        mobList.innerHTML = '<div class="p-6 text-center text-xs text-slate-400">Belum ada data perjalanan pada filter ini.</div>';
+        return;
+      }
+
+      let htmlRows = "";
+      let htmlCards = "";
+      let currentEventGroup = null;
+
+      list.forEach((row) => {
+        const hargaPerL = row.liter > 0 && row.biaya > 0 ? row.biaya / row.liter : 0;
+        const evTitle = row.eventName || "Tanpa Kegiatan";
+
+        if (odoSortMode === "name" && evTitle !== currentEventGroup) {
+          currentEventGroup = evTitle;
+          const evItems = list.filter(x => (x.eventName || "Tanpa Kegiatan") === currentEventGroup);
+          const evLiter = evItems.reduce((s, x) => s + (Number(x.liter) || 0), 0);
+          const evBiaya = evItems.reduce((s, x) => s + (Number(x.biaya) || 0), 0);
+          const uniqueDrivers = new Set(evItems.map(x => x.driver)).size;
+
+          htmlRows += `
+            <tr class="bg-emerald-100/90 border-y-2 border-emerald-300">
+              <td colspan="12" class="py-2.5 px-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <span class="font-extrabold text-[#1b4332] text-xs uppercase tracking-wide">${currentEventGroup}</span>
+                  <span class="text-[11px] font-bold text-emerald-900">
+                    ${uniqueDrivers} Pengemudi • ${evItems.length} Baris • Total: ${fmtNum(evLiter, 1)} L (${fmtRp(evBiaya)})
+                  </span>
+                </div>
+              </td>
+            </tr>
+          `;
+
+          htmlCards += `
+            <div class="bg-emerald-100 px-4 py-2.5 border-y border-emerald-300 flex flex-wrap items-center justify-between gap-1">
+              <span class="font-extrabold text-xs text-[#1b4332]">${currentEventGroup}</span>
+              <span class="text-[11px] font-bold text-emerald-900">${fmtNum(evLiter, 1)} L • ${fmtRp(evBiaya)}</span>
+            </div>
+          `;
+        }
+
+        htmlRows += `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-2.5 px-3 text-[11px] font-semibold text-emerald-800 max-w-[160px] truncate" title="${evTitle}">${evTitle}</td>
+            <td class="py-2.5 px-3 whitespace-nowrap">${fmtDate(row.tanggal)}</td>
+            <td class="py-2.5 px-3 font-bold text-slate-800">${row.driver}</td>
+            <td class="py-2.5 px-3 font-mono text-slate-600">${row.plat}</td>
+            <td class="py-2.5 px-3 text-right font-mono">${fmtNum(row.odoAwal)}</td>
+            <td class="py-2.5 px-3 text-right font-mono">${row.odoIsi != null ? fmtNum(row.odoIsi) : "-"}</td>
+            <td class="py-2.5 px-3 text-right font-mono font-bold">${fmtNum(row.odoAkhir)}</td>
+            <td class="py-2.5 px-3 text-right font-semibold text-emerald-700">${row.liter > 0 ? fmtNum(row.liter, 1) + " L" : "-"}</td>
+            <td class="py-2.5 px-3 text-right font-semibold">${row.biaya > 0 ? fmtRp(row.biaya) : "-"}</td>
+            <td class="py-2.5 px-3 text-right text-slate-500">${hargaPerL > 0 ? fmtRp(hargaPerL) : "-"}</td>
+            <td class="py-2.5 px-3 text-slate-600 max-w-[160px] truncate" title="${row.ket || ""}">${row.ket || "-"}</td>
+            <td class="py-2.5 px-3 text-center whitespace-nowrap">
+              <button onclick="openEditOdo('${row.id}')" class="px-2 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px] mr-1">Edit</button>
+              <button onclick="deleteOdo('${row.id}')" class="px-2 py-1 rounded bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[11px]">Hapus</button>
+            </td>
+          </tr>
+        `;
+
+        htmlCards += `
+          <div class="p-4 space-y-2">
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <div class="text-[11px] font-bold text-emerald-700">${evTitle}</div>
+                <div class="font-bold text-sm text-slate-800">${row.driver} <span class="text-xs font-mono text-slate-500">(${row.plat})</span></div>
+                <div class="text-xs text-slate-500">${fmtDate(row.tanggal)}</div>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button onclick="openEditOdo('${row.id}')" class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-xs">Edit</button>
+                <button onclick="deleteOdo('${row.id}')" class="px-2.5 py-1 rounded-lg bg-red-50 text-red-600 font-bold text-xs">Hapus</button>
+              </div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl text-xs">
+              <div><span class="text-slate-400 block text-[10px]">Odo Awal</span><span class="font-bold">${fmtNum(row.odoAwal)}</span></div>
+              <div><span class="text-slate-400 block text-[10px]">Odo Isi BBM</span><span class="font-bold">${row.odoIsi != null ? fmtNum(row.odoIsi) : "-"}</span></div>
+              <div><span class="text-slate-400 block text-[10px]">Odo Tujuan</span><span class="font-bold">${fmtNum(row.odoAkhir)}</span></div>
+            </div>
+            <div class="flex items-center justify-between text-xs pt-1">
+              <span class="font-bold text-emerald-700">${row.liter > 0 ? fmtNum(row.liter, 1) + " L • " + fmtRp(row.biaya) : "Tidak isi BBM"}</span>
+              <span class="text-slate-500 truncate max-w-[160px]">${row.ket || ""}</span>
+            </div>
+          </div>
+        `;
+      });
+
+      tbody.innerHTML = htmlRows;
+      mobList.innerHTML = htmlCards;
+    };
+
+    window.openEditOdo = function(id) {
+      const row = odoLogs.find(x => x.id === id);
+      if (!row) return;
+      populateEventSelects();
+      populateDriverSelects();
+      document.getElementById("editOdoId").value = row.id;
+      document.getElementById("editOdoEvent").value = row.eventName || "";
+      document.getElementById("editOdoTanggal").value = row.tanggal;
+      document.getElementById("editOdoDriver").value = row.driver;
+      document.getElementById("editOdoPlat").value = row.plat;
+      document.getElementById("editOdoAwal").value = row.odoAwal;
+      document.getElementById("editOdoIsi").value = row.odoIsi != null ? row.odoIsi : "";
+      document.getElementById("editOdoAkhir").value = row.odoAkhir;
+      document.getElementById("editOdoLiter").value = row.liter || "";
+      document.getElementById("editOdoBiaya").value = row.biaya || "";
+      document.getElementById("editOdoKet").value = row.ket || "";
+      calcEditOdoPreview();
+      openModal("modalEditOdo");
+    };
+
+    window.submitEditOdo = async function(e) {
+      e.preventDefault();
+      const odoAwal = Number(document.getElementById("editOdoAwal").value);
+      const odoIsiRaw = document.getElementById("editOdoIsi").value;
+      const odoIsi = odoIsiRaw !== "" ? Number(odoIsiRaw) : null;
+      const odoAkhir = Number(document.getElementById("editOdoAkhir").value);
+
+      if (odoAkhir < odoAwal) {
+        alert("Odometer Sampai Tujuan tidak boleh lebih kecil dari Odometer Awal!");
+        return;
+      }
+
+      const updated = {
+        id: document.getElementById("editOdoId").value,
+        eventName: document.getElementById("editOdoEvent").value,
+        tanggal: document.getElementById("editOdoTanggal").value,
+        driver: toTitleCase(document.getElementById("editOdoDriver").value),
+        plat: document.getElementById("editOdoPlat").value.trim().toUpperCase(),
+        odoAwal,
+        odoIsi,
+        odoAkhir,
+        liter: parseFloat(document.getElementById("editOdoLiter").value) || 0,
+        biaya: Number(document.getElementById("editOdoBiaya").value) || 0,
+        ket: document.getElementById("editOdoKet").value.trim()
+      };
+
+      await saveRecord("odo_logs", updated, true);
+      closeModal("modalEditOdo");
+    };
+
+    window.deleteOdo = (id) => deleteRecord("odo_logs", id);
+
+    // ===================================================================
+    // SHEET 2: PENGISIAN BBM & HARGA ZONA
+    // ===================================================================
+    const BBM_TYPES = ["Pertalite", "Pertamax", "Pertamax Turbo", "Biosolar", "Dexlite", "Pertamina Dex"];
+
+    function renderBbmTypeButtons() {
+      const selected = document.getElementById("bbmJenis").value;
+      const zone = document.getElementById("bbmZone").value;
+      const prices = zonePrices[zone].prices;
+
+      const container = document.getElementById("bbmTypeButtons");
+      container.innerHTML = BBM_TYPES.map(type => {
+        const isSel = type === selected;
+        const p = prices[type] || 10000;
+        return `
+          <button type="button" onclick="selectBbmType('${type}')"
+            class="p-2.5 rounded-xl border text-left transition ${isSel ? "bg-[#1b4332] text-white border-[#1b4332] shadow" : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"}">
+            <div class="font-bold text-xs">${type}</div>
+            <div class="text-[11px] ${isSel ? "text-emerald-200" : "text-slate-400"}">${fmtRp(p)}/L</div>
+          </button>
+        `;
+      }).join("");
+    }
+
+    window.selectBbmType = function(type) {
+      document.getElementById("bbmJenis").value = type;
+      renderBbmTypeButtons();
+      autoCalcBbmLiter();
+    };
+
+    window.onZoneChange = function() {
+      updatePriceBanner();
+      renderBbmTypeButtons();
+      autoCalcBbmLiter();
+    };
+
+    window.detectZoneFromSpbu = function(val) {
+      const lower = val.toLowerCase();
+      const zoneSelect = document.getElementById("bbmZone");
+      if (lower.includes("sabang")) {
+        if (zoneSelect.value !== "FTZ_SABANG") {
+          zoneSelect.value = "FTZ_SABANG";
+          onZoneChange();
+        }
+      } else if (lower.includes("lhokseumawe") || lower.includes("aceh") || lower.includes("medan") || lower.includes("binjai") || lower.includes("siantar") || lower.includes("tebing")) {
+        if (zoneSelect.value !== "SUMUT_ACEH") {
+          zoneSelect.value = "SUMUT_ACEH";
+          onZoneChange();
+        }
+      }
+    };
+
+    function updatePriceBanner() {
+      const zone = document.getElementById("bbmZone").value;
+      const zObj = zonePrices[zone];
+      document.getElementById("activeZoneLabel").textContent = zObj.label;
+      const summary = BBM_TYPES.map(t => `${t}: ${fmtRp(zObj.prices[t])}`).join(" | ");
+      document.getElementById("activePriceSummary").textContent = summary;
+    }
+
+    window.autoCalcBbmLiter = function() {
+      const zone = document.getElementById("bbmZone").value;
+      const type = document.getElementById("bbmJenis").value;
+      const nominal = parseFloat(document.getElementById("bbmNominal").value) || 0;
+      const unitPrice = zonePrices[zone].prices[type] || 10000;
+
+      document.getElementById("bbmUnitPriceHint").textContent = `Acuan tarif (${zonePrices[zone].label.split("(")[0].trim()}): ${fmtRp(unitPrice)} / Liter`;
+
+      if (nominal > 0 && unitPrice > 0) {
+        const liter = nominal / unitPrice;
+        document.getElementById("bbmLiter").value = liter.toFixed(2);
+      } else {
+        document.getElementById("bbmLiter").value = "";
+      }
+    };
+
+    window.resetBbmForm = function() {
+      const keepEvent = document.getElementById("bbmEvent").value;
+      setTimeout(() => {
+        document.getElementById("bbmTanggal").valueAsDate = new Date();
+        document.getElementById("bbmEvent").value = lockedEventParam || keepEvent;
+        selectBbmType("Pertalite");
+      }, 10);
+    };
+
+    window.handleSaveBbm = async function(e) {
+      e.preventDefault();
+      const item = {
+        eventName: document.getElementById("bbmEvent").value,
+        tanggal: document.getElementById("bbmTanggal").value,
+        spbu: document.getElementById("bbmSpbu").value.trim(),
+        nominal: Number(document.getElementById("bbmNominal").value) || 0,
+        liter: parseFloat(document.getElementById("bbmLiter").value) || 0,
+        jenis: document.getElementById("bbmJenis").value,
+        zone: document.getElementById("bbmZone").value
+      };
+      await saveRecord("bbm_logs", item, false);
+      const selectedEv = item.eventName;
+      document.getElementById("formBbm").reset();
+      setTimeout(() => {
+        document.getElementById("bbmTanggal").valueAsDate = new Date();
+        document.getElementById("bbmEvent").value = selectedEv;
+        selectBbmType("Pertalite");
+      }, 10);
+    };
+
+    window.renderBbmTable = function() {
+      const globalEv = document.getElementById("globalEventFilter").value;
+      const q = document.getElementById("filterBbmSearch").value.toLowerCase();
+      const jenisFilter = document.getElementById("filterBbmJenis").value;
+
+      let list = [...bbmLogs].sort((a, b) => (a.eventName || "").localeCompare(b.eventName || "") || b.tanggal.localeCompare(a.tanggal));
+      if (globalEv && globalEv !== "ALL") list = list.filter(x => x.eventName === globalEv);
+      if (q) list = list.filter(x => (x.spbu || "").toLowerCase().includes(q));
+      if (jenisFilter !== "ALL") list = list.filter(x => x.jenis === jenisFilter);
+
+      const tbody = document.getElementById("bbmTableBody");
+      const mobList = document.getElementById("bbmMobileList");
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-slate-400">Belum ada data pengisian BBM pada filter ini.</td></tr>';
+        mobList.innerHTML = '<div class="p-6 text-center text-xs text-slate-400">Belum ada data pengisian BBM pada filter ini.</div>';
+        return;
+      }
+
+      tbody.innerHTML = list.map(row => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="py-3 px-4 text-[11px] font-bold text-emerald-800">${row.eventName || "-"}</td>
+          <td class="py-3 px-4 whitespace-nowrap">${fmtDate(row.tanggal)}</td>
+          <td class="py-3 px-4 font-bold text-slate-800">${row.spbu}</td>
+          <td class="py-3 px-4 text-right font-bold text-[#1b4332]">${fmtRp(row.nominal)}</td>
+          <td class="py-3 px-4 text-right font-semibold">${fmtNum(row.liter, 2)} L</td>
+          <td class="py-3 px-4 text-center">
+            <span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 font-bold text-[11px]">${row.jenis}</span>
+          </td>
+          <td class="py-3 px-4 text-center whitespace-nowrap">
+            <button onclick="openEditBbm('${row.id}')" class="px-2.5 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px] mr-1">Edit</button>
+            <button onclick="deleteBbm('${row.id}')" class="px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[11px]">Hapus</button>
+          </td>
+        </tr>
+      `).join("");
+
+      mobList.innerHTML = list.map(row => `
+        <div class="p-4 space-y-2">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <div class="text-[11px] font-bold text-emerald-700">${row.eventName || "-"}</div>
+              <div class="font-bold text-sm text-slate-800">${row.spbu}</div>
+              <div class="text-xs text-slate-500">${fmtDate(row.tanggal)} • <span class="font-bold text-emerald-700">${row.jenis}</span></div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button onclick="openEditBbm('${row.id}')" class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-xs">Edit</button>
+              <button onclick="deleteBbm('${row.id}')" class="px-2.5 py-1 rounded-lg bg-red-50 text-red-600 font-bold text-xs">Hapus</button>
+            </div>
+          </div>
+          <div class="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-xl text-xs">
+            <span class="font-extrabold text-[#1b4332]">${fmtRp(row.nominal)}</span>
+            <span class="font-bold text-slate-700">${fmtNum(row.liter, 2)} Liter</span>
+          </div>
+        </div>
+      `).join("");
+    };
+
+    window.openEditBbm = function(id) {
+      const row = bbmLogs.find(x => x.id === id);
+      if (!row) return;
+      populateEventSelects();
+      document.getElementById("editBbmId").value = row.id;
+      document.getElementById("editBbmEvent").value = row.eventName || "";
+      document.getElementById("editBbmTanggal").value = row.tanggal;
+      document.getElementById("editBbmZone").value = row.zone || "SUMUT_ACEH";
+      document.getElementById("editBbmSpbu").value = row.spbu;
+      document.getElementById("editBbmJenis").value = row.jenis;
+      document.getElementById("editBbmNominal").value = row.nominal;
+      document.getElementById("editBbmLiter").value = row.liter;
+      openModal("modalEditBbm");
+    };
+
+    window.calcEditBbmLiter = function() {
+      const zone = document.getElementById("editBbmZone").value;
+      const jenis = document.getElementById("editBbmJenis").value;
+      const nominal = parseFloat(document.getElementById("editBbmNominal").value) || 0;
+      const unitPrice = zonePrices[zone].prices[jenis] || 10000;
+      if (nominal > 0) {
+        document.getElementById("editBbmLiter").value = (nominal / unitPrice).toFixed(2);
+      }
+    };
+
+    window.submitEditBbm = async function(e) {
+      e.preventDefault();
+      const updated = {
+        id: document.getElementById("editBbmId").value,
+        eventName: document.getElementById("editBbmEvent").value,
+        tanggal: document.getElementById("editBbmTanggal").value,
+        zone: document.getElementById("editBbmZone").value,
+        spbu: document.getElementById("editBbmSpbu").value.trim(),
+        jenis: document.getElementById("editBbmJenis").value,
+        nominal: Number(document.getElementById("editBbmNominal").value) || 0,
+        liter: parseFloat(document.getElementById("editBbmLiter").value) || 0
+      };
+      await saveRecord("bbm_logs", updated, true);
+      closeModal("modalEditBbm");
+    };
+
+    window.deleteBbm = (id) => deleteRecord("bbm_logs", id);
+
+    window.openPriceModal = function() {
+      document.getElementById("priceModalZone").value = document.getElementById("bbmZone").value;
+      loadPriceModalInputs();
+      openModal("modalPrices");
+    };
+
+    window.loadPriceModalInputs = function() {
+      const zone = document.getElementById("priceModalZone").value;
+      const prices = zonePrices[zone].prices;
+      document.getElementById("priceInputsGrid").innerHTML = BBM_TYPES.map(t => `
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">${t} (Rp/L)</label>
+          <input type="number" id="priceInput_${t.replace(/\s+/g, "_")}" value="${prices[t]}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold" />
+        </div>
+      `).join("");
+    };
+
+    window.saveZonePrices = async function() {
+      const zone = document.getElementById("priceModalZone").value;
+      BBM_TYPES.forEach(t => {
+        const val = Number(document.getElementById("priceInput_" + t.replace(/\s+/g, "_")).value);
+        if (val > 0) zonePrices[zone].prices[t] = val;
+      });
+      await saveMasterSettings();
+      updatePriceBanner();
+      renderBbmTypeButtons();
+      autoCalcBbmLiter();
+      closeModal("modalPrices");
+    };
+
+    window.resetDefaultPrices = function() {
+      zonePrices = JSON.parse(JSON.stringify(DEFAULT_ZONE_PRICES));
+      loadPriceModalInputs();
+    };
+
+    function refreshAllViews() {
+      const globalEv = document.getElementById("globalEventFilter").value;
+      const filteredOdo = globalEv === "ALL" ? odoLogs : odoLogs.filter(x => x.eventName === globalEv);
+      const filteredBbm = globalEv === "ALL" ? bbmLogs : bbmLogs.filter(x => x.eventName === globalEv);
+
+      const totLiter = filteredOdo.reduce((s, x) => s + (Number(x.liter) || 0), 0);
+      const totBiaya = filteredOdo.reduce((s, x) => s + (Number(x.biaya) || 0), 0);
+      const avgHarga = totLiter > 0 ? totBiaya / totLiter : 0;
+      const maxOdo = filteredOdo.reduce((m, x) => Math.max(m, Number(x.odoAkhir) || 0), 0);
+
+      document.getElementById("kpiOdoLiter").textContent = fmtNum(totLiter, 1) + " L";
+      document.getElementById("kpiOdoBiaya").textContent = fmtRp(totBiaya);
+      document.getElementById("kpiOdoAvg").textContent = fmtRp(avgHarga);
+      document.getElementById("kpiOdoMax").textContent = fmtNum(maxOdo) + " km";
+      document.getElementById("badgeCountOdo").textContent = filteredOdo.length;
+
+      const bbmNom = filteredBbm.reduce((s, x) => s + (Number(x.nominal) || 0), 0);
+      const bbmLit = filteredBbm.reduce((s, x) => s + (Number(x.liter) || 0), 0);
+
+      document.getElementById("kpiBbmCount").textContent = filteredBbm.length + " x";
+      document.getElementById("kpiBbmNominal").textContent = fmtRp(bbmNom);
+      document.getElementById("kpiBbmLiter").textContent = fmtNum(bbmLit, 2) + " L";
+      document.getElementById("badgeCountBbm").textContent = filteredBbm.length;
+
+      renderOdoTable();
+      renderBbmTable();
+    }
+
+    function downloadCSV(filename, rows) {
+      const csvContent = "\uFEFF" + rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    window.exportOdoCSV = function() {
+      const globalEv = document.getElementById("globalEventFilter").value;
+      const base = globalEv === "ALL" ? odoLogs : odoLogs.filter(x => x.eventName === globalEv);
+      const sorted = [...base].sort((a, b) => (a.eventName || "").localeCompare(b.eventName || "") || a.driver.localeCompare(b.driver) || a.tanggal.localeCompare(b.tanggal) || a.odoAwal - b.odoAwal);
+
+      const header = ["Nama Kegiatan", "Tanggal", "Nama Pengemudi", "No. Plat", "Odometer Awal (km)", "Odometer Saat Isi BBM (km)", "Odometer Sampai Tujuan (km)", "Jumlah BBM (Liter)", "Biaya BBM (Rp)", "Harga per Liter (Rp)", "Keterangan"];
+      const data = sorted.map(r => [
+        r.eventName || "",
+        r.tanggal,
+        r.driver,
+        r.plat,
+        r.odoAwal,
+        r.odoIsi ?? "",
+        r.odoAkhir,
+        r.liter,
+        r.biaya,
+        r.liter > 0 ? Math.round(r.biaya / r.liter) : "",
+        r.ket || ""
+      ]);
+      const fname = globalEv === "ALL" ? "Log_Odometer_Semua_Kegiatan.csv" : `Log_Odometer_${globalEv.replace(/[^a-zA-Z0-9]/g, "_")}.csv`;
+      downloadCSV(fname, [header, ...data]);
+    };
+
+    window.exportBbmCSV = function() {
+      const globalEv = document.getElementById("globalEventFilter").value;
+      const base = globalEv === "ALL" ? bbmLogs : bbmLogs.filter(x => x.eventName === globalEv);
+      const sorted = [...base].sort((a, b) => (a.eventName || "").localeCompare(b.eventName || "") || a.tanggal.localeCompare(b.tanggal));
+
+      const header = ["Nama Kegiatan", "Tanggal", "Pengisian SPBU Dimana", "Nominal (Rp)", "Liter", "Jenis BBM"];
+      const data = sorted.map(r => [r.eventName || "", r.tanggal, r.spbu, r.nominal, r.liter, r.jenis]);
+      const fname = globalEv === "ALL" ? "Log_Pengisian_BBM_Semua_Kegiatan.csv" : `Log_BBM_${globalEv.replace(/[^a-zA-Z0-9]/g, "_")}.csv`;
+      downloadCSV(fname, [header, ...data]);
+    };
+
+    window.openPrintModal = function(defaultType = "both") {
+      populateEventSelects();
+      const globalEv = document.getElementById("globalEventFilter").value;
+      document.getElementById("printEventFilter").value = globalEv;
+      document.getElementById("printReportType").value = defaultType;
+      renderPrintPreview();
+      openModal("modalPrint");
+    };
+
+    window.renderPrintPreview = function() {
+      const evFilter = document.getElementById("printEventFilter").value;
+      const type = document.getElementById("printReportType").value;
+      const orient = document.getElementById("printOrientation").value;
+      const showSign = document.getElementById("printShowSign").checked;
+      const sheetClass = orient === "landscape" ? "a4-sheet-landscape" : "a4-sheet-portrait";
+      const printDateStr = new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
+
+      const signCity = (document.getElementById("signCity")?.value || "Medan").trim();
+      const signLeftHeader = (document.getElementById("signLeftHeader")?.value || "Telah diperhitungkan").trim();
+      const signLeftUnit = (document.getElementById("signLeftUnit")?.value || "Kantor Perwakilan Bank Indonesia Provinsi Sumatera Utara").trim();
+      const signLeftName = (document.getElementById("signLeftName")?.value || "").trim();
+      const signLeftRole = (document.getElementById("signLeftRole")?.value || "Manajer").trim();
+
+      const signRightSubHeader = (document.getElementById("signRightSubHeader")?.value || "Yang mempertanggungjawabkan").trim();
+      const signRightName = (document.getElementById("signRightName")?.value || "Mhd Andy Syahputra Siregar").trim();
+      const signRightRole = (document.getElementById("signRightRole")?.value || "Pelaksana").trim();
+
+      const leftNameDisplay = signLeftName
+        ? `<div style="font-weight: 700; text-decoration: underline; text-underline-offset: 3px; color: #0f172a;">${signLeftName}</div>`
+        : `<div style="color: #64748b; letter-spacing: 1px;">................................................</div>`;
+
+      const rightNameDisplay = signRightName
+        ? `<div style="font-weight: 700; text-decoration: underline; text-underline-offset: 3px; color: #0f172a;">${signRightName}</div>`
+        : `<div style="color: #64748b; letter-spacing: 1px;">................................................</div>`;
+
+      const signBlock = showSign ? `
+        <div style="margin-top: 26px; display: flex; justify-content: space-between; align-items: flex-start; font-size: 10.5px; color: #0f172a; page-break-inside: avoid;">
+          <div style="text-align: center; width: 270px;">
+            <div>${signLeftHeader}</div>
+            <div style="margin-top: 2px;">${signLeftUnit}</div>
+            <div style="height: 60px;"></div>
+            ${leftNameDisplay}
+            <div style="margin-top: 2px;">${signLeftRole}</div>
+          </div>
+          <div style="text-align: center; width: 270px;">
+            <div>${signCity ? signCity + ", " : ""}${printDateStr}</div>
+            <div style="margin-top: 2px;">${signRightSubHeader}</div>
+            <div style="height: 60px;"></div>
+            ${rightNameDisplay}
+            <div style="margin-top: 2px;">${signRightRole}</div>
+          </div>
+        </div>
+      ` : "";
+
+      const allEventNames = Array.from(new Set([
+        ...odoLogs.map(x => x.eventName || "Tanpa Kegiatan"),
+        ...bbmLogs.map(x => x.eventName || "Tanpa Kegiatan")
+      ])).sort((a, b) => a.localeCompare(b));
+
+      const targetEvents = evFilter === "ALL" ? allEventNames : [evFilter];
+      let html = "";
+
+      targetEvents.forEach((evName) => {
+        if (type === "odo" || type === "both") {
+          const evOdo = odoLogs
+            .filter(x => (x.eventName || "Tanpa Kegiatan") === evName)
+            .sort((a, b) => a.driver.localeCompare(b.driver) || a.tanggal.localeCompare(b.tanggal) || a.odoAwal - b.odoAwal);
+
+          if (evOdo.length > 0 || evFilter !== "ALL") {
+            const totL = evOdo.reduce((s, x) => s + (Number(x.liter) || 0), 0);
+            const totB = evOdo.reduce((s, x) => s + (Number(x.biaya) || 0), 0);
+
+            html += `
+              <div class="${sheetClass} text-slate-900">
+                <div style="border-bottom: 2px solid #1b4332; padding-bottom: 8px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-end;">
+                  <div>
+                    <div style="font-size: 14px; font-weight: 800; color: #1b4332;">LAPORAN LOG ODOMETER & PENGISIAN BBM</div>
+                    <div style="font-size: 11px; font-weight: 700; color: #0f172a; margin-top: 2px;">Kegiatan: ${evName}</div>
+                  </div>
+                  <div style="font-size: 10px; color: #475569;">Sheet 1 • ${evOdo.length} baris</div>
+                </div>
+
+                <table style="width: 100%; border-collapse: collapse; font-size: 9.5px;">
+                  <thead>
+                    <tr style="background-color: #1b4332; color: white;">
+                      <th style="border: 1px solid #cbd5e1; padding: 5px;">No</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 5px;">Tanggal</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 5px;">Nama Pengemudi</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 5px;">No. Plat</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 5px; text-align: right;">Odo Awal</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 5px; text-align: right;">Odo Isi BBM</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 5px; text-align: right;">Odo Tujuan</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 5px; text-align: right;">Liter</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 5px; text-align: right;">Biaya BBM</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 5px; text-align: right;">Harga/L</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 5px;">Keterangan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${evOdo.map((r, i) => {
+                      const perL = r.liter > 0 && r.biaya > 0 ? fmtRp(r.biaya / r.liter) : "-";
+                      return `
+                        <tr style="background-color: ${i % 2 === 0 ? "#ffffff" : "#f8fafc"};">
+                          <td style="border: 1px solid #cbd5e1; padding: 4px; text-align: center;">${i + 1}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 4px; white-space: nowrap;">${fmtDate(r.tanggal)}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 4px; font-weight: bold;">${r.driver}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 4px; text-align: center;">${r.plat}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 4px; text-align: right;">${fmtNum(r.odoAwal)}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 4px; text-align: right;">${r.odoIsi != null ? fmtNum(r.odoIsi) : "-"}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 4px; text-align: right; font-weight: bold;">${fmtNum(r.odoAkhir)}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 4px; text-align: right;">${r.liter > 0 ? fmtNum(r.liter, 1) : "-"}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 4px; text-align: right;">${r.biaya > 0 ? fmtRp(r.biaya) : "-"}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 4px; text-align: right;">${perL}</td>
+                          <td style="border: 1px solid #cbd5e1; padding: 4px;">${r.ket || "-"}</td>
+                        </tr>
+                      `;
+                    }).join("")}
+                    <tr style="background-color: #d8f3dc; font-weight: bold;">
+                      <td colspan="7" style="border: 1px solid #cbd5e1; padding: 5px; text-align: right;">TOTAL (${evName})</td>
+                      <td style="border: 1px solid #cbd5e1; padding: 5px; text-align: right;">${fmtNum(totL, 1)} L</td>
+                      <td style="border: 1px solid #cbd5e1; padding: 5px; text-align: right;">${fmtRp(totB)}</td>
+                      <td colspan="2" style="border: 1px solid #cbd5e1; padding: 5px;"></td>
+                    </tr>
+                    <tr style="background-color: #f0fdf4;">
+                      <td colspan="11" style="border: 1px solid #cbd5e1; padding: 5px 8px; font-style: italic; font-weight: 700; color: #1b4332;">
+                        Terbilang : ${terbilangRupiah(totB)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                ${signBlock}
+              </div>
+            `;
+          }
+        }
+
+        if (type === "bbm" || type === "both") {
+          const evBbm = bbmLogs
+            .filter(x => (x.eventName || "Tanpa Kegiatan") === evName)
+            .sort((a, b) => a.tanggal.localeCompare(b.tanggal));
+
+          if (evBbm.length > 0 || evFilter !== "ALL") {
+            const totNom = evBbm.reduce((s, x) => s + (Number(x.nominal) || 0), 0);
+            const totLit = evBbm.reduce((s, x) => s + (Number(x.liter) || 0), 0);
+
+            html += `
+              <div class="${sheetClass} text-slate-900">
+                <div style="border-bottom: 2px solid #1b4332; padding-bottom: 8px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-end;">
+                  <div>
+                    <div style="font-size: 14px; font-weight: 800; color: #1b4332;">LAPORAN TRANSAKSI PENGISIAN BBM (SPBU)</div>
+                    <div style="font-size: 11px; font-weight: 700; color: #0f172a; margin-top: 2px;">Kegiatan: ${evName}</div>
+                  </div>
+                  <div style="font-size: 10px; color: #475569;">Sheet 2 • ${evBbm.length} transaksi</div>
+                </div>
+
+                <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+                  <thead>
+                    <tr style="background-color: #1b4332; color: white;">
+                      <th style="border: 1px solid #cbd5e1; padding: 6px; width: 35px;">No</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 6px; width: 100px;">Tanggal</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 6px;">Pengisian SPBU Dimana</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 6px; text-align: right; width: 120px;">Nominal (Rp)</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 6px; text-align: right; width: 85px;">Liter</th>
+                      <th style="border: 1px solid #cbd5e1; padding: 6px; text-align: center; width: 110px;">Jenis BBM</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${evBbm.map((r, i) => `
+                      <tr style="background-color: ${i % 2 === 0 ? "#ffffff" : "#f8fafc"};">
+                        <td style="border: 1px solid #cbd5e1; padding: 5px; text-align: center;">${i + 1}</td>
+                        <td style="border: 1px solid #cbd5e1; padding: 5px; white-space: nowrap;">${fmtDate(r.tanggal)}</td>
+                        <td style="border: 1px solid #cbd5e1; padding: 5px; font-weight: bold;">${r.spbu}</td>
+                        <td style="border: 1px solid #cbd5e1; padding: 5px; text-align: right;">${fmtRp(r.nominal)}</td>
+                        <td style="border: 1px solid #cbd5e1; padding: 5px; text-align: right;">${fmtNum(r.liter, 2)} L</td>
+                        <td style="border: 1px solid #cbd5e1; padding: 5px; text-align: center;">${r.jenis}</td>
+                      </tr>
+                    `).join("")}
+                    <tr style="background-color: #d8f3dc; font-weight: bold;">
+                      <td colspan="3" style="border: 1px solid #cbd5e1; padding: 6px; text-align: right;">TOTAL (${evName})</td>
+                      <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: right;">${fmtRp(totNom)}</td>
+                      <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: right;">${fmtNum(totLit, 2)} L</td>
+                      <td style="border: 1px solid #cbd5e1; padding: 6px;"></td>
+                    </tr>
+                    <tr style="background-color: #f0fdf4;">
+                      <td colspan="6" style="border: 1px solid #cbd5e1; padding: 6px 8px; font-style: italic; font-weight: 700; color: #1b4332;">
+                        Terbilang : ${terbilangRupiah(totNom)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                ${signBlock}
+              </div>
+            `;
+          }
+        }
+      });
+
+      document.getElementById("printPreviewContainer").innerHTML = html || '<div class="text-white text-center py-10">Tidak ada data untuk dicetak.</div>';
+    };
+
+    window.openModal = function(id) {
+      const el = document.getElementById(id);
+      el.classList.remove("hidden");
+      el.classList.add("flex");
+    };
+    window.closeModal = function(id) {
+      const el = document.getElementById(id);
+      el.classList.add("hidden");
+      el.classList.remove("flex");
+    };
+
+    document.getElementById("odoTanggal").valueAsDate = new Date();
+    document.getElementById("bbmTanggal").valueAsDate = new Date();
+    renderBbmTypeButtons();
+    initStorage();
+  </script>
+</body>
+</html>
